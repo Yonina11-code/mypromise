@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+<body>
+    <script>
+      class myPromise {
+        constructor (handle) {
+          this['[[PromiseState]]'] = 'pending'
+          this['[[PromiseResult]]'] = undefined
+          this.resolveFn = []
+          this.rejectFn = []
+          handle(this.#resolve.bind(this), this.#reject.bind(this)) //
+        }
+        /**
+         * 为了方便维护，我把resolve与reject作为内部函数
+        */
+        #resolve (val) {
+          this['[[PromiseState]]'] = 'fulfilled'
+          this['[[PromiseResult]]'] = val
+          // this.resolveFn && this.resolveFn(val)
+          // 从尾推入， 从头拿出
+          const run = () => {
+            let cb
+            while (cb = this.resolveFn.shift()) {
+              cb && cb(val)
+            }
+          }
+          const observer = new MutationObserver(run)
+          observer.observe(document.body, {
+            attributes: true
+          })
+          document.body.setAttribute('what', 'shenmewanyier')
+          // setTimeout(() => {
+          //   run
+          // })
+        }
+        #reject (err) {
+          this['[[PromiseState]]'] = 'rejected'
+          this['[[PromiseResult]]'] = err
+          // this.rejectFn && this.rejectFn(err)
+          // 从尾推入， 从头拿出
+          const run = () => {
+            let cb
+            while (cb = this.rejectFn.shift()) {
+              cb && cb(err)
+            }
+          }
+          const observer = new MutationObserver(run)
+          observer.observe(document.body, {
+            attributes: true
+          })
+          document.body.setAttribute('what', 'shenmewanyier')
+        }
+        then (successCallback, failCallback) {
+          return new myPromise ((resolve, reject) => {
+            let resolveFn = (res) => {
+              let val = successCallback && successCallback(res) // 拿到回调函数的执行结果
+              // 判断val的类型
+              if (val instanceof myPromise) {
+                // val.then(a => {
+                //   resolve(a)
+                // })
+                val.then(resolve)
+              } else {
+                resolve(val)
+              }
+            }
+            this.resolveFn.push(resolveFn)
+
+            let rejectFn = (res) => {
+              let val = failCallback && failCallback(res)
+              reject(val)
+            }
+            this.rejectFn.push(rejectFn)
+          })
+        }
+        catch (fn) {
+          return this.then(undefined, fn)
+        }
+        finally (Callback) {
+          if (this['[[PromiseState]]'] !== 'pending') {
+            Callback && Callback()
+          }
+        }
+
+        static all (list) {
+          let successArr = new Array() // 成功的结果集
+          let flag = false // 是否有错误信息
+          const length  = list.length
+          return new myPromise((resolve, reject) => {
+            for (let i = 0; i < length; i++ ) {
+              list[i].then(res => {
+                successArr[i] = res
+                if (i >= list.length -1 && !flag) {
+                  resolve(successArr)
+                }
+              }, err => {
+                flag = true
+                reject(err)
+                return
+              })
+            }
+          })
+        }
+        /**
+         * allSettled 不常用
+         *  等到所有promises都已敲定（settled）（每个promise都已兑现（fulfilled）或已拒绝（rejected））。
+            返回一个promise，该promise在所有promise完成后完成。并带有一个对象数组，每个对象对应每个promise的结果。
+        */
+        static allSettled (lists) {
+          let resArr = new Array(lists.length) // lists的结果集要一一对应且长度相等
+          let num = 0 // lists是否执行完毕
+          return new myPromise(resolve => {
+            lists.forEach((item, key) => {
+              let obj = {}
+              item.then(res => {
+                obj['status'] = 'fulfilled'
+                obj['value'] = res
+                resArr[key] = obj
+                num++
+                if (num >= lists.length) {
+                  resolve(resArr)
+                }
+              }, err => {
+              obj['status'] = 'rejected'
+              obj['reason'] = err
+              resArr[key] = obj
+              num++
+              if (num >= lists.length) {
+                  resolve(resArr)
+              }
+            })
+            })
+          })
+         }
+        static race (list) {
+          return new myPromise((resolve, reject) => {
+            list.forEach(element => {
+              element.then(res => { // 谁最快，谁先调取
+                resolve(res)
+              }, err => {
+                reject(err)
+              })
+            });
+          })
+        }
+        static reject (err) {
+          return new myPromise ((resolve, reject) => {
+            reject(err)
+          })
+        }
+        static resolve (val) {
+          return new myPromise (resolve => {
+            resolve(val)
+          })
+        }
+      }
+      const myP = new myPromise((resolve, reject) => {
+        setTimeout(() => {
+          resolve('111')
+        }, 1000)
+      })
+      const myP2 = new myPromise((resolve, reject) => {
+        resolve('222')
+      })
+      const myP3 = new myPromise((resolve, reject) => {
+        resolve('332')
+      })
+      myPromise.all([myP, myP2, myP3]).then(res => {
+        console.log('结果', res)
+      }, err => {
+        console.log('结果 err', err)
+      })
+      console.log('yhey', myPromise.resolve('dhdh'))
+
+
+
+
+
+
+
+      const p = new Promise((resolve, reject) => {
+        setTimeout(() => {
+          resolve('111')
+        }, 1000)
+      })
+      const p2 = new Promise((resolve, reject) => {
+          resolve('222')
+      })
+      const p3 = new Promise((resolve, reject) => {
+        resolve('333')
+      })
+      p.finally(res => {
+        console.log('finally', res)
+      })
+      // function test () {
+      //   console.log('aa')
+      //   return {
+      //     a: () => {
+      //       console.log('aa-aa')
+      //       // return test().a()
+      //     }
+      //   }
+      // }
+      // console.log(',,,,', test().a())
+    </script>
+</body>
+</html>
